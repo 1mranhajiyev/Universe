@@ -395,13 +395,17 @@
             aiLoadingIndicator.style.display = 'block'; // Yükləmə göstəricisini göstər
             aiExtraFact.textContent = ""; // Əvvəlki süni intellekt faktını təmizlə
 
-            // Prompt in Azerbaijani (Azərbaycan dilində sorğu)
+            // PRO TIP: Bu, sizin Gemini API açarınız olacaq.
+            // Təhlükəsizlik səbəbindən, real tətbiqlərdə API açarlarını birbaşa JavaScript kodunda saxlamaqdan çəkinin.
+            // Bunun əvəzinə, açarı server tərəfində saxlamaq və bir proksi vasitəsilə müraciət etmək tövsiyə olunur (məsələn, Vercel/Netlify Functions).
+            // Lakin, bu nümunə üçün, API-ni işə salmaq üçün açarı bura daxil edə bilərsiniz.
+            const apiKey = "YOUR_GEMINI_API_KEY_HERE"; // <--- BURAYA ÖZ API AÇARINIZI DAXİL EDİN
+
             const prompt = `${currentPlanetName} haqqında bir qısa, maraqlı və az bilinən bir fakt verin. Qısa və cəlbedici olsun, təxminən 1-2 cümlə. Bu təsvirdə artıq olan məlumatları təkrarlamayın: '${currentPlanetDescription}'.`;
 
             let chatHistory = [];
             chatHistory.push({ role: "user", parts: [{ text: prompt }] });
             const payload = { contents: chatHistory };
-            const apiKey = ""; // Canvas will provide this (Kavkaz bunu təmin edəcək)
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
             try {
@@ -410,18 +414,28 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+                
+                if (!response.ok) {
+                    const errorDetails = await response.text();
+                    console.error('API çağırışında xəta:', response.status, response.statusText, errorDetails);
+                    aiExtraFact.textContent = `Süni intellekt faktı yüklənə bilmədi: API xətası. Lütfən, API açarınızı və internet bağlantınızı yoxlayın. Detallar üçün konsola baxın.`;
+                    return; // Stop execution on error (Xəta zamanı icranı dayandırın)
+                }
+
                 const result = await response.json();
+                
                 if (result.candidates && result.candidates.length > 0 &&
                     result.candidates[0].content && result.candidates[0].content.parts &&
                     result.candidates[0].content.parts.length > 0) {
                     const text = result.candidates[0].content.parts[0].text;
                     aiExtraFact.textContent = "AI faktı: " + text; // Süni intellekt tərəfindən yaradılan faktı göstər
                 } else {
-                    aiExtraFact.textContent = "Süni intellekt faktı yüklənə bilmədi."; // Xəta mesajı
+                    console.error("Gemini API-dən gözlənilməyən cavab strukturu:", result);
+                    aiExtraFact.textContent = "Süni intellekt faktı yüklənə bilmədi: Gözlənilməyən cavab formatı.";
                 }
             } catch (error) {
                 console.error("Gemini API çağırışında xəta:", error);
-                aiExtraFact.textContent = "Süni intellekt faktı yüklənərkən xəta baş verdi."; // Xəta mesajı
+                aiExtraFact.textContent = `Süni intellekt faktı yüklənərkən xəta baş verdi: ${error.message}. Lütfən, internet bağlantınızı yoxlayın.`;
             } finally {
                 aiFactButton.disabled = false; // Düyməni yenidən aktivləşdir
                 aiLoadingIndicator.style.display = 'none'; // Yükləmə göstəricisini gizlət
@@ -438,14 +452,18 @@
             aiLoadingIndicator.style.display = 'block'; // Yükləmə göstəricisini göstər
             aiExtraScenario.textContent = ""; // Əvvəlki süni intellekt ssenarisini təmizlə
 
+            // PRO TIP: Bu, sizin Gemini API açarınız olacaq.
+            // Təhlükəsizlik səbəbindən, real tətbiqlərdə API açarlarını birbaşa JavaScript kodunda saxlamaqdan çəkinin.
+            // Bunun əvəzinə, açarı server tərəfində saxlamaq və bir proksi vasitəsilə müraciət etmək tövsiyə olunur (məsələn, Vercel/Netlify Functions).
+            // Lakin, bu nümunə üçün, API-ni işə salmaq üçün açarı bura daxil edə bilərsiniz.
+            const apiKey = "YOUR_GEMINI_API_KEY_HERE"; // <--- BURAYA ÖZ API AÇARINIZI DAXİL EDİN
+
             // Prompt for scenario in Azerbaijani (Ssenari üçün Azərbaycan dilində sorğu)
-            // Enhanced prompt for better quality scenarios (Daha keyfiyyətli ssenarilər üçün təkmilləşdirilmiş sorğu)
             const prompt = `"${currentPlanetName}" planeti haqqında 2-3 cümlədən ibarət, uşaqlar üçün uyğun, qısa və hekayəvi bir ssenari və ya əyləncəli fərziyyə yaradın. Cümlə quruluşlarına və mənalı axıcılığa diqqət edin. Məlumatın təkcə faktiki deyil, həm də yaradıcı və təxəyyülü inkişaf etdirən xarakterdə olduğundan əmin olun.`;
 
             let chatHistory = [];
             chatHistory.push({ role: "user", parts: [{ text: prompt }] });
             const payload = { contents: chatHistory };
-            const apiKey = ""; // Canvas will provide this (Kavkaz bunu təmin edəcək)
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
             try {
@@ -455,15 +473,15 @@
                     body: JSON.stringify(payload)
                 });
                 
-                // Check if the response is OK (Cavabın OK olub-olmadığını yoxlayın)
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`API çağırışında xəta: ${response.status} ${response.statusText} - ${errorText}`);
+                    const errorDetails = await response.text();
+                    console.error('API çağırışında xəta:', response.status, response.statusText, errorDetails);
+                    aiExtraScenario.textContent = `Süni intellekt ssenarisi yüklənə bilmədi: API xətası. Lütfən, API açarınızı və internet bağlantınızı yoxlayın. Detallar üçün konsola baxın.`;
+                    return; // Stop execution on error (Xəta zamanı icranı dayandırın)
                 }
 
                 const result = await response.json();
                 
-                // Detailed check for response structure (Cavab strukturunun ətraflı yoxlanılması)
                 if (result.candidates && result.candidates.length > 0 &&
                     result.candidates[0].content && result.candidates[0].content.parts &&
                     result.candidates[0].content.parts.length > 0) {
@@ -471,11 +489,11 @@
                     aiExtraScenario.textContent = "Senari: " + text; // Süni intellekt tərəfindən yaradılan ssenarini göstər
                 } else {
                     console.error("Gemini API-dən gözlənilməyən cavab strukturu:", result);
-                    aiExtraScenario.textContent = "Süni intellekt ssenarisi yüklənə bilmədi: Gözlənilməyən cavab."; // Xəta mesajı
+                    aiExtraScenario.textContent = "Süni intellekt ssenarisi yüklənə bilmədi: Gözlənilməyən cavab formatı.";
                 }
             } catch (error) {
                 console.error("Gemini API çağırışında xəta:", error);
-                aiExtraScenario.textContent = `Süni intellekt ssenarisi yüklənərkən xəta baş verdi: ${error.message}`; // Xəta mesajı
+                aiExtraScenario.textContent = `Süni intellekt ssenarisi yüklənərkən xəta baş verdi: ${error.message}. Lütfən, internet bağlantınızı yoxlayın.`;
             } finally {
                 aiScenarioButton.disabled = false; // Düyməni yenidən aktivləşdir
                 aiLoadingIndicator.style.display = 'none'; // Yükləmə göstəricisini gizlət
