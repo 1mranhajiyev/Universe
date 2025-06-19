@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Günəş Sistemi</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; /* Hide scrollbars */
+            font-family: "Inter", sans-serif;
+            background-color: #000;
+            color: #fff;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1; /* Below intro screen */
+            opacity: 0; /* Hidden initially */
+            transition: opacity 1s ease-in-out;
+        }
+        canvas.visible {
+            opacity: 1;
+        }
+        #intro-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 100;
+            transition: opacity 1s ease-in-out, transform 1s ease-in-out;
+        }
+        #intro-screen.fade-out {
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none;
+        }
+        #intro-content {
+            max-width: 600px;
+            padding: 20px;
+            border-radius: 12px;
+            background-color: rgba(0, 0, 0, 0.5);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        #intro-button {
+            margin-top: 30px;
+            padding: 12px 24px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #intro-button:hover {
+            background-color: #45a049;
+        }
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 300px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: opacity 0.3s ease-in-out;
+            opacity: 0;
+            pointer-events: none; /* Allows clicks to pass through when hidden */
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 2; /* Above canvas */
+        }
+        #info-panel.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        #close-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+        .ai-loading-indicator { /* Changed to class for multiple instances */
+            display: none; /* Hidden by default */
+            margin-top: 10px;
+            font-style: italic;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div id="intro-screen">
+        <div id="intro-content">
+            <h1 class="text-3xl font-bold mb-4">Kainatımızı Kəşf Edin</h1>
+            <p class="text-lg mb-6">Bizim Günəş sistemimiz sonsuz Kainatın yalnız kiçik bir hissəsidir. Kainat milyardlarla qalaktika, ulduz və digər kosmik obyektlərlə doludur. Hələ kəşf edilməmiş saysız-hesabsız sirləri özündə saxlayır.</p>
+            <button id="intro-button">Başla</button>
+        </div>
+    </div>
+
+    <div id="info-panel" class="hidden">
+        <button id="close-button">X</button>
+        <h2 id="planet-name" class="text-xl font-bold mb-2"></h2>
+        <p id="planet-description" class="text-sm"></p>
+
+        <button id="ai-fact-button" class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 ease-in-out">
+            ✨ Süni İntellektlə Daha Çox Öyrən ✨
+        </button>
+        <div id="ai-fact-loading-indicator" class="ai-loading-indicator text-xs text-gray-400">Yüklənir...</div>
+        <p id="ai-extra-fact" class="text-sm mt-2 italic text-gray-300"></p>
+
+        <button id="ai-scenario-button" class="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg shadow-md transition-all duration-200 ease-in-out">
+            ✨ Maraqlı Senari Yarat ✨
+        </button>
+        <div id="ai-scenario-loading-indicator" class="ai-loading-indicator text-xs text-gray-400">Yüklənir...</div>
+        <p id="ai-extra-scenario" class="text-sm mt-2 italic text-gray-300"></p>
+    </div>
+
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls CDN (for camera interaction) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script type="module">
+        // Basic Scene Setup (Əsas Səhnə Quraşdırılması)
+        let scene, camera, renderer, controls;
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        const textureLoader = new THREE.TextureLoader(); // Initialize TextureLoader (TextureLoader-ı ilkinləşdir)
+
+
+        // Object to hold all planet meshes (Bütün planet torlarını saxlamaq üçün obyekt)
+        const planets = [];
+        const orbitLines = []; // To hold orbit line meshes for later updates if needed
+        let sun; // Declare sun globally so it can be accessed in animate and onClick (Günəşi qlobal elan edin ki, animasiya və klik funksiyalarında ona daxil olunsun)
+        let saturnRing; // To store Saturn's ring for animation
+
+        // Store the currently displayed planet's data for AI generation
+        let currentPlanetName = "";
+        let currentPlanetDescription = "";
+
+        // Planet data with relative sizes, colors, and orbital periods (simplified)
+        // (Nisbi ölçüləri, rəngləri və orbital dövrləri olan planet məlumatları (sadələşdirilmiş))
+        const planetData = [
+            { name: "Merkuri", size: 0.38, orbitRadius: 20, orbitSpeed: 0.008, description: "Merkuri - Günəş sistemimizin ən kiçik və Günəşə ən yaxın planetidir. Ay kimi, onun da səthi sıx kraterlərlə örtülüdür və gündüz-gecə arasında kəskin temperatur fərqləri müşahidə olunur.", textureUrl: "https://placehold.co/256x256/8A8A8A/ffffff?text=Merkuri" },
+            { name: "Venera", size: 0.95, orbitRadius: 30, orbitSpeed: 0.005, description: "Venera - yüksək səth temperaturu və əsasən karbon qazından ibarət qalın, zəhərli atmosferi ilə tanınır. O, əksər planetlərdən fərqli istiqamətdə fırlanır, bu da onun günlərinin çox uzun olmasına səbəb olur.", textureUrl: "https://placehold.co/256x256/F2E6B1/000000?text=Venera" },
+            { name: "Yer", size: 1.0, orbitRadius: 40, orbitSpeed: 0.004, description: "Yer, bol maye suyu və müxtəlif həyat formaları ilə unikal olan planetimizdir. Onun tək təbii peyki Ay və geniş ekosistemləri dəstəkləyən atmosferi var.", textureUrl: "https://placehold.co/256x256/4169E1/ffffff?text=Yer" },
+            { name: "Mars", size: 0.53, orbitRadius: 50, orbitSpeed: 0.003, description: "Mars, tərkibindəki dəmirdən dolayı səthinin qırmızımtıl rənginə görə tez-tez 'Qırmızı Planet' adlandırılır. Buzlaqları, vulkanları və keçmişdə suyun mövcudluğuna dair sübutları var ki, bu da onu gələcək insan araşdırmaları üçün cəlbedici edir.", textureUrl: "https://placehold.co/256x256/C1440E/ffffff?text=Mars" },
+            { name: "Yupiter", size: 11.2, orbitRadius: 80, orbitSpeed: 0.001, description: "Yupiter - Günəş sistemimizin ən böyük planetidir, əsasən hidrogen və heliumdan ibarət nəhəng bir qaz nəhəngidir. Onun səthində Yerdən daha böyük olan, 'Böyük Qırmızı Ləkə' adlanan davamlı bir fırtına və güclü maqnit sahəsi mövcuddur.", textureUrl: "https://placehold.co/256x256/D3A971/000000?text=Yupiter" },
+            { name: "Saturn", size: 9.45, orbitRadius: 110, orbitSpeed: 0.0009, description: "Saturn, milyardlarla kiçik buz və qaya hissəciklərindən təşkil olunmuş möhtəşəm halqa sistemi ilə məşhurdur. O, Günəş sistemimizdəki ikinci ən böyük planetdir və Yupiter kimi, həmçinin bir qaz nəhəngidir.", textureUrl: "https://placehold.co/256x256/F9D59C/000000?text=Saturn" },
+            { name: "Uran", size: 4.0, orbitRadius: 140, orbitSpeed: 0.0004, description: "Uran, demək olar ki, orbitinə 90 dərəcə bucaq altında, 'tərəfində fırlanması' ilə unikal olan bir buz nəhəngidir. Atmosferindəki metan səbəbindən solğun mavi-yaşıl rəngə malikdir və zəif halqa sisteminə sahibdir.", textureUrl: "https://placehold.co/256x256/A7DBD8/000000?text=Uran" },
+            { name: "Neptun", size: 3.88, orbitRadius: 170, orbitSpeed: 0.0003, description: "Neptun - Günəşdən ən uzaq məlum planetdir və digər buz nəhəngidir. Güclü küləklər, ultrasürətli fırtınalar və zəif halqalarla xarakterizə olunur. Cazibədar rənginə görə tez-tez 'mavi nəhəng' adlandırılır.", textureUrl: "https://placehold.co/256x256/3667E3/ffffff?text=Neptun" },
+        ];
+
+        // Initialize the scene (Səhnəni ilkin vəziyyətə gətir)
+        function init() {
+            // Scene (Səhnə)
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000); // Qara kosmos
+
+            // Camera (Kamera)
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 20000);
+            camera.position.set(0, 50, 200); // Kamera ilkin mövqeyi
+
+            // Renderer (Renderçi)
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.domElement.id = 'solarSystemCanvas'; // Give canvas an ID (Kanvasa ID verin)
+            document.body.appendChild(renderer.domElement);
+
+            // OrbitControls (Orbit İdarəetmələri)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Daha hamar kamera hərəkəti üçün
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.maxDistance = 500;
+            controls.minDistance = 15; // Increased from 10
+            
+
+            // Lights (İşıqlar)
+            const ambientLight = new THREE.AmbientLight(0x333333); // Yumşaq ətraf işığı
+            scene.add(ambientLight);
+
+            const pointLight = new THREE.PointLight(0xFFFFFF, 1.5); // Günəşdən işıq
+            scene.add(pointLight);
+
+            // Sun (centered at the origin) (Günəş (mərkəzdə yerləşən))
+            const sunGeometry = new THREE.SphereGeometry(10, 64, 64);
+            const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xFDB813 }); // Günəş üçün sarı-narıncı
+            sun = new THREE.Mesh(sunGeometry, sunMaterial); // Assign to global 'sun' variable (Qlobal 'sun' dəyişəninə təyin edin)
+            sun.name = "Günəş"; // Tanınmaq üçün ad verin
+            sun.userData = {
+                description: "Günəş sistemimizin mərkəzində yerləşən, Yer üzündəki bütün həyatı işıq və istiliklə təmin edən bir ulduzdur. O, əsasən hidrogen və heliumdan ibarət, nüvə birləşməsi reaksiyalarına məruz qalan nəhəng bir plazma topudur."
+            };
+            scene.add(sun);
+
+            // Add a starry background using PointsMaterial (Ulduzlu fonu PointsMaterial istifadə edərək əlavə et)
+            createStars();
+
+            // Create Planets and Orbits (Planetləri və Orbitləri yarat)
+            planetData.forEach(data => {
+                // Planet Mesh (Planet Toru)
+                const planetGeometry = new THREE.SphereGeometry(data.size, 64, 64);
+                let planetMaterial;
+
+                // Create a temporary material until texture loads (Tekstura yüklənənə qədər müvəqqəti material yaradın)
+                planetMaterial = new THREE.MeshStandardMaterial({ color: 0xFFFFFF }); // Default white (Varsayılan ağ)
+                
+                const planet = new THREE.Mesh(planetGeometry, planetMaterial);
+                
+                // Load texture for the planet (Planet üçün tekstura yüklə)
+                textureLoader.load(data.textureUrl,
+                    function (texture) {
+                        // On success (Uğurlu yükləmədə)
+                        planet.material = new THREE.MeshStandardMaterial({ map: texture });
+                        planet.material.needsUpdate = true;
+                    },
+                    undefined, // On progress (İrəliləyişdə)
+                    function (err) {
+                        // On error (Xəta baş verdikdə)
+                        console.error('An error happened loading texture for ' + data.name + ':', err);
+                        // Fallback to a basic color if texture fails (Tekstura yüklənməsə, əsas rəngə qayıt)
+                        planet.material = new THREE.MeshStandardMaterial({ color: 0xCCCCCC }); // Gray fallback (Boz geri dönüş)
+                    }
+                );
+
+                planet.name = data.name; // Raycasting üçün ad təyin edin
+                planet.userData = { // Bütün müvafiq məlumatları saxlayın
+                    description: data.description,
+                    size: data.size,
+                    orbitRadius: data.orbitRadius,
+                    orbitSpeed: data.orbitSpeed
+                };
+                scene.add(planet);
+                planets.push(planet); // Animasiya üçün massivə əlavə edin
+
+                // Orbit path (a simple circle for visualization) (Orbit yolu (vizualizasiya üçün sadə dairə))
+                const points = [];
+                for (let i = 0; i <= 64; i++) {
+                    const theta = (i / 64) * Math.PI * 2;
+                    points.push(new THREE.Vector3(Math.cos(theta) * data.orbitRadius, 0, Math.sin(theta) * data.orbitRadius));
+                }
+                const orbitGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                const orbitMaterial = new THREE.LineBasicMaterial({ color: 0x444444 }); // Darker for subtlety
+                const orbit = new THREE.Line(orbitGeometry, orbitMaterial);
+                scene.add(orbit);
+                orbitLines.push(orbit); // Add to orbital lines array
+            });
+
+            // Add Saturn's Rings (Saturnun halqalarını əlavə et)
+            const saturn = planets.find(p => p.name === "Saturn");
+            if (saturn) {
+                // Ring geometry
+                const innerRadius = saturn.userData.size * 1.5; // Slightly larger than Saturn
+                const outerRadius = saturn.userData.size * 2.5; // Outer edge of rings
+                const ringGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 64);
+                const ringMaterial = new THREE.MeshBasicMaterial({ // Changed to Basic for simplicity with color
+                    color: 0x8B7C6E, // A grayish-brown color
+                    side: THREE.DoubleSide, // Render both sides of the ring
+                    transparent: true,
+                    opacity: 0.8
+                });
+                saturnRing = new THREE.Mesh(ringGeometry, ringMaterial);
+                saturnRing.rotation.x = -Math.PI / 2; // Orient horizontally
+                // Add the ring as a child of Saturn so it moves with it
+                saturn.add(saturnRing);
+            }
+
+
+            // Event Listeners (Hadisə Dinləyiciləri)
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.domElement.addEventListener('click', onClick, false);
+            document.getElementById('ai-fact-button').addEventListener('click', generateAIFact); // AI fact button listener
+            document.getElementById('ai-scenario-button').addEventListener('click', generateAIScenario); // NEW: AI scenario button listener
+
+            // Start the animation loop (Animasiya dövrəsi)
+            animate();
+        }
+
+        // Function to create a starry background (Ulduzlu fon yaratmaq üçün funksiya)
+        function createStars() {
+            const starsGeometry = new THREE.BufferGeometry();
+            const starsCount = 15000; // Ulduzların sayı
+            const starFieldRadius = 10000; // Ulduz sahəsinin radiusu
+
+            const positions = [];
+            for (let i = 0; i < starsCount; i++) {
+                // Generate random positions within a sphere (Sfera daxilində təsadüfi mövqelər yarat)
+                const x = (Math.random() * 2 - 1) * starFieldRadius;
+                const y = (Math.random() * 2 - 1) * starFieldRadius;
+                const z = (Math.random() * 2 - 1) * starFieldRadius;
+                positions.push(x, y, z);
+            }
+            starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+            const starsMaterial = new THREE.PointsMaterial({
+                color: 0xAAAAAA, // Ulduzların rəngi
+                size: 0.5, // Ulduzların ölçüsü
+                transparent: true,
+                opacity: 0.8,
+                sizeAttenuation: true // Ulduzlar uzaqlaşdıqda kiçik görünür
+            });
+
+            const starField = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(starField);
+        }
+
+        // Handle window resizing (Pəncərənin ölçüsünü dəyişməyə nəzarət et)
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Handle click events (Klik hadisələrinə nəzarət et)
+        function onClick(event) {
+            // Calculate mouse position in normalized device coordinates (-1 to +1)
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Update the raycaster with the camera and mouse position
+            raycaster.setFromCamera(mouse, camera);
+
+            // Calculate objects intersecting the raycaster (Şüa ilə kəsişən obyektləri hesablayın)
+            // Include sun in the intersectableObjects array (Günəşi kəsişən obyektlər massivinə daxil edin)
+            const intersectableObjects = [...planets];
+            if (sun) { // Ensure sun is initialized (Günəşin ilkinləşdirildiyinə əmin olun)
+                intersectableObjects.push(sun);
+            }
+            const intersects = raycaster.intersectObjects(intersectableObjects);
+
+            if (intersects.length > 0) {
+                const clickedObject = intersects[0].object;
+                if (clickedObject.userData.description) {
+                    currentPlanetName = clickedObject.name;
+                    currentPlanetDescription = clickedObject.userData.description;
+                    displayPlanetInfo(currentPlanetName, currentPlanetDescription);
+                }
+            } else {
+                hidePlanetInfo(); // Hide panel if nothing is clicked (Heç bir şey kliklənməyibsə paneli gizlət)
+            }
+        }
+
+        // Display planet information (Planet məlumatlarını göstər)
+        function displayPlanetInfo(name, description) {
+            const infoPanel = document.getElementById('info-panel');
+            document.getElementById('planet-name').textContent = name;
+            document.getElementById('planet-description').textContent = description;
+            document.getElementById('ai-extra-fact').textContent = ""; // Clear previous AI fact
+            document.getElementById('ai-extra-scenario').textContent = ""; // NEW: Clear previous AI scenario
+            infoPanel.classList.add('visible'); // Show the panel (Paneli göstər)
+            infoPanel.classList.remove('hidden');
+        }
+
+        // Hide planet information (Planet məlumatlarını gizlət)
+        function hidePlanetInfo() {
+            const infoPanel = document.getElementById('info-panel');
+            infoPanel.classList.remove('visible'); // Hide the panel (Paneli gizlət)
+            infoPanel.classList.add('hidden');
+            currentPlanetName = "";
+            currentPlanetDescription = "";
+            document.getElementById('ai-extra-fact').textContent = "";
+            document.getElementById('ai-extra-scenario').textContent = ""; // NEW: Clear scenario on hide
+        }
+
+        // Close button functionality (Bağlama düyməsinin funksionallığı)
+        document.getElementById('close-button').addEventListener('click', hidePlanetInfo);
+
+        // Function to generate AI fact (Süni intellekt faktı yaratmaq üçün funksiya)
+        async function generateAIFact() {
+            const aiFactButton = document.getElementById('ai-fact-button');
+            const aiLoadingIndicator = document.getElementById('ai-fact-loading-indicator');
+            const aiExtraFact = document.getElementById('ai-extra-fact');
+
+            aiFactButton.disabled = true; // Yüklənərkən düyməni sıradan çıxar
+            aiLoadingIndicator.style.display = 'block'; // Yükləmə göstəricisini göstər
+            aiExtraFact.textContent = ""; // Əvvəlki süni intellekt faktını təmizlə
+
+            // Prompt in Azerbaijani (Azərbaycan dilində sorğu)
+            const prompt = `${currentPlanetName} haqqında bir qısa, maraqlı və az bilinən bir fakt verin. Qısa və cəlbedici olsun, təxminən 1-2 cümlə. Bu təsvirdə artıq olan məlumatları təkrarlamayın: '${currentPlanetDescription}'.`;
+
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = ""; // Canvas will provide this (Kavkaz bunu təmin edəcək)
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    aiExtraFact.textContent = "AI faktı: " + text; // Süni intellekt tərəfindən yaradılan faktı göstər
+                } else {
+                    aiExtraFact.textContent = "Süni intellekt faktı yüklənə bilmədi."; // Xəta mesajı
+                }
+            } catch (error) {
+                console.error("Gemini API çağırışında xəta:", error);
+                aiExtraFact.textContent = "Süni intellekt faktı yüklənərkən xəta baş verdi."; // Xəta mesajı
+            } finally {
+                aiFactButton.disabled = false; // Düyməni yenidən aktivləşdir
+                aiLoadingIndicator.style.display = 'none'; // Yükləmə göstəricisini gizlət
+            }
+        }
+
+        // NEW Function to generate AI scenario (YENİ: Süni intellekt ssenarisi yaratmaq üçün funksiya)
+        async function generateAIScenario() {
+            const aiScenarioButton = document.getElementById('ai-scenario-button');
+            const aiLoadingIndicator = document.getElementById('ai-scenario-loading-indicator');
+            const aiExtraScenario = document.getElementById('ai-extra-scenario');
+
+            aiScenarioButton.disabled = true; // Yüklənərkən düyməni sıradan çıxar
+            aiLoadingIndicator.style.display = 'block'; // Yükləmə göstəricisini göstər
+            aiExtraScenario.textContent = ""; // Əvvəlki süni intellekt ssenarisini təmizlə
+
+            // Prompt for scenario in Azerbaijani (Ssenari üçün Azərbaycan dilində sorğu)
+            const prompt = `"${currentPlanetName}" planeti haqqında 2-3 cümlədən ibarət, uşaqlar üçün uyğun, qısa və hekayəvi bir ssenari və ya əyləncəli fərziyyə yaradın. Cümlə quruluşlarına və mənalı axıcılığa diqqət edin.`;
+
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = ""; // Canvas will provide this (Kavkaz bunu təmin edəcək)
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    aiExtraScenario.textContent = "Senari: " + text; // Süni intellekt tərəfindən yaradılan ssenarini göstər
+                } else {
+                    aiExtraScenario.textContent = "Süni intellekt ssenarisi yüklənə bilmədi."; // Xəta mesajı
+                }
+            } catch (error) {
+                console.error("Gemini API çağırışında xəta:", error);
+                aiExtraScenario.textContent = "Süni intellekt ssenarisi yüklənərkən xəta baş verdi."; // Xəta mesajı
+            } finally {
+                aiScenarioButton.disabled = false; // Düyməni yenidən aktivləşdir
+                aiLoadingIndicator.style.display = 'none'; // Yükləmə göstəricisini gizlət
+            }
+        }
+
+
+        // Animation loop (Animasiya dövrəsi)
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Update controls (İdarəetmələri yenilə)
+            controls.update();
+
+            // Animate planets (Planetləri canlandır)
+            const time = Date.now() * 0.0005; // Animasiya üçün vaxt
+
+            planets.forEach(planet => {
+                const data = planet.userData;
+                // Revolution around the Sun (Günəş ətrafında inqilab)
+                planet.position.x = Math.cos(time * data.orbitSpeed) * data.orbitRadius;
+                planet.position.z = Math.sin(time * data.orbitSpeed) * data.orbitRadius;
+
+                // Simple self-rotation (Sadə öz-özünə fırlanma)
+                planet.rotation.y += 0.01;
+            });
+
+            // Make the Sun rotate (Günəşi fırladın)
+            if (sun) { // Ensure sun is initialized (Günəşin ilkinləşdirildiyinə əmin olun)
+                sun.rotation.y += 0.005;
+            }
+
+            // If Saturn's ring exists, make it rotate (Əgər Saturnun halqası varsa, onu fırlansın)
+            if (saturnRing) {
+                saturnRing.rotation.z += 0.005; // Rotate the ring slightly
+            }
+
+            // Render the scene (Səhnəni render et)
+            renderer.render(scene, camera);
+        }
+
+        // Initial setup on window load (Pəncərə yükləndikdə ilkin quraşdırma)
+        window.onload = function() {
+            // First, initialize the 3D scene but keep canvas hidden (Əvvəlcə 3D səhnəni ilkinləşdirin, lakin kanvası gizli saxlayın)
+            init();
+
+            // Setup intro screen button (Giriş ekranı düyməsini quraşdırın)
+            document.getElementById('intro-button').addEventListener('click', () => {
+                const introScreen = document.getElementById('intro-screen');
+                const canvas = document.getElementById('solarSystemCanvas');
+
+                // Apply fade-out and scale-down effect to intro screen (Giriş ekranına solğunlaşma və kiçilmə effekti tətbiq edin)
+                introScreen.classList.add('fade-out');
+
+                // After transition, hide intro screen and show canvas (Keçiddən sonra giriş ekranını gizlədin və kanvası göstərin)
+                setTimeout(() => {
+                    introScreen.style.display = 'none';
+                    canvas.classList.add('visible'); // Make canvas visible (Kanvası görünən edin)
+                }, 1000); // Match this timeout with CSS transition duration (Bu vaxtı CSS keçid müddəti ilə uyğunlaşdırın)
+            });
+        };
+    </script>
+</body>
+</html>
