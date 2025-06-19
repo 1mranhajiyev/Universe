@@ -439,7 +439,8 @@
             aiExtraScenario.textContent = ""; // Əvvəlki süni intellekt ssenarisini təmizlə
 
             // Prompt for scenario in Azerbaijani (Ssenari üçün Azərbaycan dilində sorğu)
-            const prompt = `"${currentPlanetName}" planeti haqqında 2-3 cümlədən ibarət, uşaqlar üçün uyğun, qısa və hekayəvi bir ssenari və ya əyləncəli fərziyyə yaradın. Cümlə quruluşlarına və mənalı axıcılığa diqqət edin.`;
+            // Enhanced prompt for better quality scenarios (Daha keyfiyyətli ssenarilər üçün təkmilləşdirilmiş sorğu)
+            const prompt = `"${currentPlanetName}" planeti haqqında 2-3 cümlədən ibarət, uşaqlar üçün uyğun, qısa və hekayəvi bir ssenari və ya əyləncəli fərziyyə yaradın. Cümlə quruluşlarına və mənalı axıcılığa diqqət edin. Məlumatın təkcə faktiki deyil, həm də yaradıcı və təxəyyülü inkişaf etdirən xarakterdə olduğundan əmin olun.`;
 
             let chatHistory = [];
             chatHistory.push({ role: "user", parts: [{ text: prompt }] });
@@ -453,18 +454,28 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+                
+                // Check if the response is OK (Cavabın OK olub-olmadığını yoxlayın)
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API çağırışında xəta: ${response.status} ${response.statusText} - ${errorText}`);
+                }
+
                 const result = await response.json();
+                
+                // Detailed check for response structure (Cavab strukturunun ətraflı yoxlanılması)
                 if (result.candidates && result.candidates.length > 0 &&
                     result.candidates[0].content && result.candidates[0].content.parts &&
                     result.candidates[0].content.parts.length > 0) {
                     const text = result.candidates[0].content.parts[0].text;
                     aiExtraScenario.textContent = "Senari: " + text; // Süni intellekt tərəfindən yaradılan ssenarini göstər
                 } else {
-                    aiExtraScenario.textContent = "Süni intellekt ssenarisi yüklənə bilmədi."; // Xəta mesajı
+                    console.error("Gemini API-dən gözlənilməyən cavab strukturu:", result);
+                    aiExtraScenario.textContent = "Süni intellekt ssenarisi yüklənə bilmədi: Gözlənilməyən cavab."; // Xəta mesajı
                 }
             } catch (error) {
                 console.error("Gemini API çağırışında xəta:", error);
-                aiExtraScenario.textContent = "Süni intellekt ssenarisi yüklənərkən xəta baş verdi."; // Xəta mesajı
+                aiExtraScenario.textContent = `Süni intellekt ssenarisi yüklənərkən xəta baş verdi: ${error.message}`; // Xəta mesajı
             } finally {
                 aiScenarioButton.disabled = false; // Düyməni yenidən aktivləşdir
                 aiLoadingIndicator.style.display = 'none'; // Yükləmə göstəricisini gizlət
